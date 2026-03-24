@@ -168,6 +168,10 @@ jobs:
       if: env.ENABLE_KERNELSU == 'true'
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        # Add syscall_fn_t compat typedef for kernel 4.14
+        if ! grep -q "syscall_fn_t" include/linux/syscalls.h; then
+          printf '\n#ifndef __SYSCALL_FN_T_COMPAT\n#define __SYSCALL_FN_T_COMPAT\ntypedef asmlinkage long (*syscall_fn_t)(const struct pt_regs *);\n#endif\n' >> include/linux/syscalls.h
+        fi
         curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-dev
         if [ -d KernelSU ]; then
             KSU_VERSION="_$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 10200)"
