@@ -168,55 +168,14 @@ jobs:
       if: env.ENABLE_KERNELSU == 'true'
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        # Fix 4.14 compat: add syscall_fn_t to ARM64 asm/syscall.h (included by syscall_hook.h)
-        printf '\n#ifndef syscall_fn_t\ntypedef asmlinkage long (*syscall_fn_t)(const struct pt_regs *);\n#define syscall_fn_t syscall_fn_t\n#endif\n' >> arch/arm64/include/asm/syscall.h
-        # Fix MODULE_IMPORT_NS missing in 4.14
-        printf '\n#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif\n' >> include/linux/module.h
-        curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-dev
-        # Post-setup 4.14 compat fixes for SukiSU-Ultra source files
-        if [ -f drivers/kernelsu/allowlist.c ]; then
-            # TWA_RESUME is undefined in kernel 4.14 (task_work_add takes bool, not enum)
-            sed -i 's/TWA_RESUME/true/g' drivers/kernelsu/allowlist.c
-            # put_task_struct needs explicit include in 4.14
-            sed -i '1s/^/#include <linux\/sched\/task.h>\n/' drivers/kernelsu/allowlist.c
-        fi
-        if [ -f drivers/kernelsu/app_profile.c ]; then
-            # seccomp.filter_count doesn't exist in kernel 4.14's struct seccomp
-            sed -i '/seccomp\.filter_count/d' drivers/kernelsu/app_profile.c
-        fi
-        # linux/pgtable.h was added in 5.8; in 4.14 use asm/pgtable.h
-        if [ ! -f include/linux/pgtable.h ]; then
-            printf '#pragma once\n#include <asm/pgtable.h>\n' > include/linux/pgtable.h
-        fi
-        # Create compat shims header for kernel 4.14 (using printf to keep valid YAML)
-        printf '%s\n' \
-            '#ifndef _KSU_COMPAT_4_14_H' \
-            '#define _KSU_COMPAT_4_14_H' \
-            '#include <linux/version.h>' \
-            '#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)' \
-            '#include <linux/uaccess.h>' \
-            'static inline long strncpy_from_user_nofault(char *dst, const void __user *src, long count)' \
-            '{' \
-            '    long ret = strncpy_from_user(dst, src, count);' \
-            '    if (ret < 0) memset(dst, 0, count);' \
-            '    return ret < 0 ? 0 : ret;' \
-            '}' \
-            '#endif' \
-            '#ifndef untagged_addr' \
-            '#define untagged_addr(addr) (addr)' \
-            '#endif' \
-            '#endif' \
-            > drivers/kernelsu/compat_4_14.h
-        # Patch sucompat.c to include compat shims
-        if [ -f drivers/kernelsu/sucompat.c ]; then
-            sed -i '1s/^/#include "compat_4_14.h"\n/' drivers/kernelsu/sucompat.c
-        fi
-        # Fix syscall_hook_manager.c for 4.14
-        if [ -f drivers/kernelsu/syscall_hook_manager.c ]; then
-            # Add missing uaccess.h include
-            sed -i '1s/^/#include <linux\/uaccess.h>\n/' drivers/kernelsu/syscall_hook_manager.c
-            # __NR_clone3 was added in kernel 5.3; define it so it never matches in 4.14
-            sed -i '1s/^/#ifndef __NR_clone3\n#define __NR_clone3 435\n#endif\n/' drivers/kernelsu/syscall_hook_manager.c
+        if [ -d drivers/kernelsu ]; then
+            echo "Pre-existing KernelSU found in kernel source, skipping SukiSU-Ultra setup"
+        else
+            # Fix 4.14 compat: add syscall_fn_t to ARM64 asm/syscall.h (included by syscall_hook.h)
+            printf '\n#ifndef syscall_fn_t\ntypedef asmlinkage long (*syscall_fn_t)(const struct pt_regs *);\n#define syscall_fn_t syscall_fn_t\n#endif\n' >> arch/arm64/include/asm/syscall.h
+            # Fix MODULE_IMPORT_NS missing in 4.14
+            printf '\n#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif\n' >> include/linux/module.h
+            curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-dev
         fi
         if [ -d KernelSU ]; then
             KSU_VERSION="_$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 10200)"
