@@ -184,6 +184,10 @@ jobs:
             # put_task_struct needs explicit include in 4.14
             sed -i '1s/^/#include <linux\/sched\/task.h>\n/' drivers/kernelsu/allowlist.c
         fi
+        if [ -f drivers/kernelsu/app_profile.c ]; then
+            # seccomp.filter_count doesn't exist in kernel 4.14's struct seccomp
+            sed -i '/seccomp\.filter_count/d' drivers/kernelsu/app_profile.c
+        fi
         if [ -d KernelSU ]; then
             KSU_VERSION="_$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 10200)"
         else
