@@ -188,6 +188,31 @@ jobs:
         if [ ! -f include/linux/pgtable.h ]; then
             printf '#pragma once\n#include <asm/pgtable.h>\n' > include/linux/pgtable.h
         fi
+        # Create compat shims header for kernel 4.14
+        cat > drivers/kernelsu/compat_4_14.h << 'COMPAT_EOF'
+#ifndef _KSU_COMPAT_4_14_H
+#define _KSU_COMPAT_4_14_H
+#include <linux/version.h>
+/* strncpy_from_user_nofault added in 5.8 */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
+#include <linux/uaccess.h>
+static inline long strncpy_from_user_nofault(char *dst, const void __user *src, long count)
+{
+    long ret = strncpy_from_user(dst, src, count);
+    if (ret < 0) memset(dst, 0, count);
+    return ret < 0 ? 0 : ret;
+}
+#endif
+/* untagged_addr added in 5.0 for ARM64 MTE support */
+#ifndef untagged_addr
+#define untagged_addr(addr) (addr)
+#endif
+#endif /* _KSU_COMPAT_4_14_H */
+COMPAT_EOF
+        # Patch sucompat.c to include compat shims
+        if [ -f drivers/kernelsu/sucompat.c ]; then
+            sed -i '1s/^/#include "compat_4_14.h"\n/' drivers/kernelsu/sucompat.c
+        fi
         if [ -d KernelSU ]; then
             KSU_VERSION="_$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 10200)"
         else
