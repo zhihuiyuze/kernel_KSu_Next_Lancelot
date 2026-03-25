@@ -211,6 +211,13 @@ jobs:
         if [ -f drivers/kernelsu/sucompat.c ]; then
             sed -i '1s/^/#include "compat_4_14.h"\n/' drivers/kernelsu/sucompat.c
         fi
+        # Fix syscall_hook_manager.c for 4.14
+        if [ -f drivers/kernelsu/syscall_hook_manager.c ]; then
+            # Add missing uaccess.h include
+            sed -i '1s/^/#include <linux\/uaccess.h>\n/' drivers/kernelsu/syscall_hook_manager.c
+            # __NR_clone3 was added in kernel 5.3; define it so it never matches in 4.14
+            sed -i '1s/^/#ifndef __NR_clone3\n#define __NR_clone3 435\n#endif\n/' drivers/kernelsu/syscall_hook_manager.c
+        fi
         if [ -d KernelSU ]; then
             KSU_VERSION="_$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 10200)"
         else
