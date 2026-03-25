@@ -184,6 +184,10 @@ jobs:
             # seccomp.filter_count doesn't exist in kernel 4.14's struct seccomp
             sed -i '/seccomp\.filter_count/d' drivers/kernelsu/app_profile.c
         fi
+        # linux/pgtable.h was added in 5.8; in 4.14 use asm/pgtable.h
+        if [ ! -f include/linux/pgtable.h ]; then
+            printf '#pragma once\n#include <asm/pgtable.h>\n' > include/linux/pgtable.h
+        fi
         if [ -d KernelSU ]; then
             KSU_VERSION="_$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 10200)"
         else
