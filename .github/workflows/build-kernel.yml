@@ -173,11 +173,11 @@ jobs:
           printf '\n#ifndef __SYSCALL_FN_T_COMPAT\n#define __SYSCALL_FN_T_COMPAT\ntypedef asmlinkage long (*syscall_fn_t)(const struct pt_regs *);\n#endif\n' >> include/linux/syscalls.h
         fi
         curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-dev
-        # Fix 4.14 compat: add syscall_fn_t typedef and remove MODULE_IMPORT_NS
-        if [ -f drivers/kernelsu/hook/syscall_hook.h ]; then
-          sed -i '1s/^/typedef asmlinkage long (*syscall_fn_t)(const struct pt_regs *);\n/' drivers/kernelsu/hook/syscall_hook.h
-        fi
-        grep -rl "MODULE_IMPORT_NS" $GITHUB_WORKSPACE/kernel_workspace/android-kernel/drivers/ --include="*.c" 2>/dev/null | xargs -r sed -i '/MODULE_IMPORT_NS/d'
+        # Fix 4.14 compat: patch syscall_hook.h and remove MODULE_IMPORT_NS
+        find $GITHUB_WORKSPACE -name "syscall_hook.h" -path "*/kernelsu/*" 2>/dev/null | while read f; do
+          sed -i '1s/^/typedef asmlinkage long (*syscall_fn_t)(const struct pt_regs *);\n/' "$f"
+        done
+        find $GITHUB_WORKSPACE -name "*.c" -path "*/kernelsu/*" 2>/dev/null | xargs -r sed -i '/MODULE_IMPORT_NS/d'
         if [ -d KernelSU ]; then
             KSU_VERSION="_$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 10200)"
         else
