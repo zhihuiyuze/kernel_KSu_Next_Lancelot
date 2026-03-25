@@ -168,9 +168,10 @@ jobs:
       if: env.ENABLE_KERNELSU == 'true'
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        # Fix 4.14 compat: add missing types/macros to kernel headers
-        echo 'typedef asmlinkage long (*syscall_fn_t)(const struct pt_regs *);' >> include/linux/syscalls.h
-        grep -q "MODULE_IMPORT_NS" include/linux/module.h || printf '\n#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif\n' >> include/linux/module.h
+        # Fix 4.14 compat: add syscall_fn_t to ARM64 asm/syscall.h (included by syscall_hook.h)
+        printf '\n#ifndef syscall_fn_t\ntypedef asmlinkage long (*syscall_fn_t)(const struct pt_regs *);\n#define syscall_fn_t syscall_fn_t\n#endif\n' >> arch/arm64/include/asm/syscall.h
+        # Fix MODULE_IMPORT_NS missing in 4.14
+        printf '\n#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif\n' >> include/linux/module.h
         curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-dev
         if [ -d KernelSU ]; then
             KSU_VERSION="_$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 10200)"
