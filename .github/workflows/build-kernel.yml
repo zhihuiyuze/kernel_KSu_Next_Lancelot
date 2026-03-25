@@ -177,7 +177,7 @@ jobs:
         if [ -f drivers/kernelsu/hook/syscall_hook.h ]; then
           sed -i '1s/^/typedef asmlinkage long (*syscall_fn_t)(const struct pt_regs *);\n/' drivers/kernelsu/hook/syscall_hook.h
         fi
-        find drivers/kernelsu -name "*.c" -exec sed -i 's/MODULE_IMPORT_NS([^)]*)\s*;//g' {} \;
+        find drivers/kernelsu -name "*.c" -exec sed -i '/MODULE_IMPORT_NS/d' {} \;
         if [ -d KernelSU ]; then
             KSU_VERSION="_$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 10200)"
         else
