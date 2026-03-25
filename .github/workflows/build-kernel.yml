@@ -177,6 +177,13 @@ jobs:
             printf '\n#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif\n' >> include/linux/module.h
             curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-dev
         fi
+        # Apply 4.14 compat fixes to drivers/kernelsu regardless of which source was used
+        if [ -f drivers/kernelsu/allowlist.c ]; then
+            # TWA_RESUME is undefined in kernel 4.14 (task_work_add takes bool, not enum)
+            sed -i 's/TWA_RESUME/true/g' drivers/kernelsu/allowlist.c
+            # put_task_struct needs explicit include in 4.14
+            sed -i '1s/^/#include <linux\/sched\/task.h>\n/' drivers/kernelsu/allowlist.c
+        fi
         if [ -d KernelSU ]; then
             KSU_VERSION="_$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 10200)"
         else
