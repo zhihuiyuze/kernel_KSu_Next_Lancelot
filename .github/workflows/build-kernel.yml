@@ -188,6 +188,36 @@ jobs:
             # seccomp.filter_count doesn't exist in kernel 4.14's struct seccomp
             sed -i '/seccomp\.filter_count/d' drivers/kernelsu/app_profile.c
         fi
+        # linux/pgtable.h was added in 5.8; in 4.14 use asm/pgtable.h
+        if [ ! -f include/linux/pgtable.h ]; then
+            printf '#pragma once\n#include <asm/pgtable.h>\n' > include/linux/pgtable.h
+        fi
+        # Create compat shims header for kernel 4.14
+        printf '%s\n' \
+            '#ifndef _KSU_COMPAT_4_14_H' \
+            '#define _KSU_COMPAT_4_14_H' \
+            '#include <linux/version.h>' \
+            '#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)' \
+            '#include <linux/uaccess.h>' \
+            'static inline long strncpy_from_user_nofault(char *dst, const void __user *src, long count)' \
+            '{' \
+            '    long ret = strncpy_from_user(dst, src, count);' \
+            '    if (ret < 0) memset(dst, 0, count);' \
+            '    return ret < 0 ? 0 : ret;' \
+            '}' \
+            '#endif' \
+            '#ifndef untagged_addr' \
+            '#define untagged_addr(addr) (addr)' \
+            '#endif' \
+            '#endif' \
+            > drivers/kernelsu/compat_4_14.h
+        if [ -f drivers/kernelsu/sucompat.c ]; then
+            sed -i '1s/^/#include "compat_4_14.h"\n/' drivers/kernelsu/sucompat.c
+        fi
+        if [ -f drivers/kernelsu/syscall_hook_manager.c ]; then
+            sed -i '1s/^/#include <linux\/uaccess.h>\n/' drivers/kernelsu/syscall_hook_manager.c
+            sed -i '1s/^/#ifndef __NR_clone3\n#define __NR_clone3 435\n#endif\n/' drivers/kernelsu/syscall_hook_manager.c
+        fi
         if [ -d KernelSU ]; then
             KSU_VERSION="_$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 10200)"
         else
