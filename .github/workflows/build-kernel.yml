@@ -188,6 +188,14 @@ jobs:
             # seccomp.filter_count doesn't exist in kernel 4.14's struct seccomp
             sed -i '/seccomp\.filter_count/d' drivers/kernelsu/app_profile.c
         fi
+        if [ -f drivers/kernelsu/pkg_observer.c ]; then
+            # pkg_observer uses fsnotify API that changed significantly in 5.x;
+            # replace with no-op stubs (package monitoring is non-essential for root)
+            printf '%s\n' \
+                'int ksu_observer_init(void) { return 0; }' \
+                'void ksu_observer_exit(void) { }' \
+                > drivers/kernelsu/pkg_observer.c
+        fi
         # linux/pgtable.h was added in 5.8; in 4.14 use asm/pgtable.h
         if [ ! -f include/linux/pgtable.h ]; then
             printf '#pragma once\n#include <asm/pgtable.h>\n' > include/linux/pgtable.h
