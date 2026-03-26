@@ -200,6 +200,10 @@ jobs:
         if [ ! -f include/linux/pgtable.h ]; then
             printf '#pragma once\n#include <asm/pgtable.h>\n' > include/linux/pgtable.h
         fi
+        # Fix setuid_hook.c: ksu_seccomp_allow_cache only exists on kernel >= 5.10.2
+        if [ -f drivers/kernelsu/setuid_hook.c ]; then
+            sed -i '/ksu_seccomp_allow_cache/d' drivers/kernelsu/setuid_hook.c
+        fi
         # Create compat shims header for kernel 4.14
         printf '%s\n' \
             '#ifndef _KSU_COMPAT_4_14_H' \
@@ -207,11 +211,29 @@ jobs:
             '#include <linux/version.h>' \
             '#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)' \
             '#include <linux/uaccess.h>' \
+            '#include <linux/string.h>' \
             'static inline long strncpy_from_user_nofault(char *dst, const void __user *src, long count)' \
             '{' \
             '    long ret = strncpy_from_user(dst, src, count);' \
             '    if (ret < 0) memset(dst, 0, count);' \
             '    return ret < 0 ? 0 : ret;' \
+            '}' \
+            'static inline long copy_from_user_nofault(void *dst, const void __user *src, size_t size)' \
+            '{' \
+            '    long ret;' \
+            '    pagefault_disable();' \
+            '    ret = __copy_from_user_inatomic(dst, src, size);' \
+            '    pagefault_enable();' \
+            '    if (ret) memset(dst, 0, size);' \
+            '    return ret ? -EFAULT : 0;' \
+            '}' \
+            'static inline long copy_to_user_nofault(void __user *dst, const void *src, size_t size)' \
+            '{' \
+            '    long ret;' \
+            '    pagefault_disable();' \
+            '    ret = __copy_to_user_inatomic(dst, src, size);' \
+            '    pagefault_enable();' \
+            '    return ret ? -EFAULT : 0;' \
             '}' \
             '#endif' \
             '#ifndef untagged_addr' \
@@ -221,6 +243,9 @@ jobs:
             > drivers/kernelsu/compat_4_14.h
         if [ -f drivers/kernelsu/sucompat.c ]; then
             sed -i '1s/^/#include "compat_4_14.h"\n/' drivers/kernelsu/sucompat.c
+        fi
+        if [ -f drivers/kernelsu/ksud.c ]; then
+            sed -i '1s/^/#include "compat_4_14.h"\n/' drivers/kernelsu/ksud.c
         fi
         if [ -f drivers/kernelsu/syscall_hook_manager.c ]; then
             sed -i '1s/^/#include <linux\/uaccess.h>\n/' drivers/kernelsu/syscall_hook_manager.c
