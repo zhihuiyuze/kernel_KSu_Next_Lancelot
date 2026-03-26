@@ -168,90 +168,11 @@ jobs:
       if: env.ENABLE_KERNELSU == 'true'
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        if [ -d drivers/kernelsu ]; then
-            echo "Pre-existing KernelSU found in kernel source, skipping SukiSU-Ultra setup"
-        else
-            # Fix 4.14 compat: add syscall_fn_t to ARM64 asm/syscall.h (included by syscall_hook.h)
-            printf '\n#ifndef syscall_fn_t\ntypedef asmlinkage long (*syscall_fn_t)(const struct pt_regs *);\n#define syscall_fn_t syscall_fn_t\n#endif\n' >> arch/arm64/include/asm/syscall.h
-            # Fix MODULE_IMPORT_NS missing in 4.14
-            printf '\n#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif\n' >> include/linux/module.h
-            curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-dev
-        fi
-        # Apply 4.14 compat fixes to drivers/kernelsu regardless of which source was used
-        if [ -f drivers/kernelsu/allowlist.c ]; then
-            # TWA_RESUME is undefined in kernel 4.14 (task_work_add takes bool, not enum)
-            sed -i 's/TWA_RESUME/true/g' drivers/kernelsu/allowlist.c
-            # put_task_struct needs explicit include in 4.14
-            sed -i '1s/^/#include <linux\/sched\/task.h>\n/' drivers/kernelsu/allowlist.c
-        fi
-        if [ -f drivers/kernelsu/app_profile.c ]; then
-            # seccomp.filter_count doesn't exist in kernel 4.14's struct seccomp
-            sed -i '/seccomp\.filter_count/d' drivers/kernelsu/app_profile.c
-        fi
-        if [ -f drivers/kernelsu/pkg_observer.c ]; then
-            # pkg_observer uses fsnotify API that changed significantly in 5.x;
-            # replace with no-op stubs (package monitoring is non-essential for root)
-            printf '%s\n' \
-                'int ksu_observer_init(void) { return 0; }' \
-                'void ksu_observer_exit(void) { }' \
-                > drivers/kernelsu/pkg_observer.c
-        fi
-        # linux/pgtable.h was added in 5.8; in 4.14 use asm/pgtable.h
-        if [ ! -f include/linux/pgtable.h ]; then
-            printf '#pragma once\n#include <asm/pgtable.h>\n' > include/linux/pgtable.h
-        fi
-        # Fix setuid_hook.c: ksu_seccomp_allow_cache only exists on kernel >= 5.10.2
-        if [ -f drivers/kernelsu/setuid_hook.c ]; then
-            sed -i '/ksu_seccomp_allow_cache/d' drivers/kernelsu/setuid_hook.c
-        fi
-        # Create compat shims header for kernel 4.14
-        printf '%s\n' \
-            '#ifndef _KSU_COMPAT_4_14_H' \
-            '#define _KSU_COMPAT_4_14_H' \
-            '#include <linux/version.h>' \
-            '#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)' \
-            '#include <linux/uaccess.h>' \
-            '#include <linux/string.h>' \
-            'static inline long strncpy_from_user_nofault(char *dst, const void __user *src, long count)' \
-            '{' \
-            '    long ret = strncpy_from_user(dst, src, count);' \
-            '    if (ret < 0) memset(dst, 0, count);' \
-            '    return ret < 0 ? 0 : ret;' \
-            '}' \
-            'static inline long copy_from_user_nofault(void *dst, const void __user *src, size_t size)' \
-            '{' \
-            '    long ret;' \
-            '    pagefault_disable();' \
-            '    ret = __copy_from_user_inatomic(dst, src, size);' \
-            '    pagefault_enable();' \
-            '    if (ret) memset(dst, 0, size);' \
-            '    return ret ? -EFAULT : 0;' \
-            '}' \
-            'static inline long copy_to_user_nofault(void __user *dst, const void *src, size_t size)' \
-            '{' \
-            '    long ret;' \
-            '    pagefault_disable();' \
-            '    ret = __copy_to_user_inatomic(dst, src, size);' \
-            '    pagefault_enable();' \
-            '    return ret ? -EFAULT : 0;' \
-            '}' \
-            '#endif' \
-            '#ifndef untagged_addr' \
-            '#define untagged_addr(addr) (addr)' \
-            '#endif' \
-            '#endif' \
-            > drivers/kernelsu/compat_4_14.h
-        if [ -f drivers/kernelsu/sucompat.c ]; then
-            sed -i '1s/^/#include "compat_4_14.h"\n/' drivers/kernelsu/sucompat.c
-        fi
-        if [ -f drivers/kernelsu/ksud.c ]; then
-            sed -i '1s/^/#include "compat_4_14.h"\n/' drivers/kernelsu/ksud.c
-        fi
-        if [ -f drivers/kernelsu/syscall_hook_manager.c ]; then
-            sed -i '1s/^/#include <linux\/uaccess.h>\n/' drivers/kernelsu/syscall_hook_manager.c
-            sed -i '1s/^/#ifndef __NR_clone3\n#define __NR_clone3 435\n#endif\n/' drivers/kernelsu/syscall_hook_manager.c
-        fi
-        if [ -d KernelSU ]; then
+        # Use KernelSU-Next legacy_susfs branch - designed for kernel 4.14 with SUSFS support
+        curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy_susfs
+        if [ -d KernelSU-Next ]; then
+            KSU_VERSION="_$(cd KernelSU-Next && expr $(/usr/bin/git rev-list --count HEAD) + 10200)"
+        elif [ -d KernelSU ]; then
             KSU_VERSION="_$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 10200)"
         else
             KSU_VERSION=""
@@ -299,7 +220,6 @@ jobs:
                       CONFIG_KSU_SUSFS_OPEN_REDIRECT=y \
                       CONFIG_KSU_SUSFS_SUS_SU=y \
                       CONFIG_WITH_KPROBES=n \
-                      CONFIG_KPM=y \
                       CONFIG_KALLSYMS=y \
                       CONFIG_KALLSYMS_ALL=y
                      
